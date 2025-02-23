@@ -1,0 +1,377 @@
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+
+// Configuración del canvas (pantalla completa)
+canvas.width = window.innerWidth; // Ancho completo
+canvas.height = window.innerHeight; // Alto completo
+
+// Variables del juego
+const tileSize = 40; // Tamaño de las celdas
+const rows = Math.floor(canvas.height / tileSize);
+const cols = Math.floor(canvas.width / tileSize);
+
+let player = { 
+    x: 1, 
+    y: 1, 
+    targetX: 1, 
+    targetY: 1, 
+    direction: 'right', 
+    frame: 0, 
+    animationFrames: [0, 1, 2, 1], // Frames de animación para el jugador
+    tailAngle: 0, // Ángulo de la aleta trasera
+    tailSpeed: 0.05 // Velocidad de oscilación de la aleta
+};
+let coins = [];
+let enemies = [];
+let score = 0;
+let gameOver = false;
+let gameWon = false;
+let timeElapsed = 0; // Tiempo transcurrido en segundos
+let level = 1; // Nivel actual
+let consecutiveLosses = 0; // Contador de pérdidas consecutivas
+
+// Fondo estático
+const backgroundImage = new Image();
+backgroundImage.src = 'https://i.postimg.cc/9XGyMXr5/istockphoto-1085925138-612x612.jpg'; // Fondo estático
+
+// Imagen del jugador principal (nueva imagen)
+const playerImage = new Image();
+playerImage.src = 'https://i.postimg.cc/NGH6xNKt/upscalemedia-transformed.png';
+
+// Imágenes de los enemigos
+const enemyImage1 = new Image();
+enemyImage1.src = 'https://i.postimg.cc/jjV1zdQ6/images-removebg-preview.png'; // Primer tipo de enemigo
+
+const enemyImage2 = new Image();
+enemyImage2.src = 'https://i.postimg.cc/ZKwBBWmg/images-1-removebg-preview.png'; // Segundo tipo de enemigo
+
+// Imágenes de las criptomonedas (actualizadas)
+const cryptoImages = [
+    'https://i.postimg.cc/7h0SYLFh/Ghqra-Ggac-AA91tb-removebg-preview.png',
+    'https://i.postimg.cc/cHVQS35P/Animaci-n-2.png',
+    'https://i.postimg.cc/JnybvxKb/Animaci-n-1.png'
+];
+
+const cryptoTypes = cryptoImages.map((imageSrc, index) => {
+    const img = new Image();
+    img.src = imageSrc;
+    return { name: `Crypto${index + 1}`, image: img };
+});
+
+// Esperar a que todas las imágenes se carguen antes de iniciar el juego
+Promise.all([
+    new Promise(resolve => backgroundImage.onload = resolve),
+    new Promise(resolve => playerImage.onload = resolve),
+    new Promise(resolve => enemyImage1.onload = resolve),
+    new Promise(resolve => enemyImage2.onload = resolve),
+    ...cryptoTypes.map(crypto => new Promise(resolve => crypto.image.onload = resolve))
+]).then(() => {
+    initGame(); // Iniciar el juego después de cargar todas las imágenes
+}).catch(error => {
+    console.error("Error al cargar las imágenes:", error);
+});
+
+// Generar monedas en todo el mapa
+function generateCoins() {
+    coins = []; // Limpiar las monedas anteriores
+    for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+            const randomCrypto = cryptoTypes[(row * cols + col) % cryptoTypes.length]; // Distribución equitativa
+            coins.push({ x: col, y: row, type: randomCrypto });
+        }
+    }
+}
+
+// Generar enemigos (redes de pesca)
+function generateEnemies() {
+    enemies = []; // Limpiar los enemigos anteriores
+    const enemyCount = Math.max(5, level + 3); // Aumentar el número de enemigos según el nivel
+    const usedPositions = new Set();
+
+    for (let i = 0; i < enemyCount; i++) {
+        let row, col;
+        do {
+            row = Math.floor(Math.random() * rows);
+            col = Math.floor(Math.random() * cols);
+        } while (usedPositions.has(`${row},${col}`)); // Evitar posiciones repetidas
+
+        usedPositions.add(`${row},${col}`);
+        const enemyType = i % 2 === 0 ? enemyImage1 : enemyImage2; // Alternar entre los dos tipos de enemigos
+        enemies.push({
+            x: col,
+            y: row,
+            direction: Math.random() > 0.5 ? 'horizontal' : 'vertical',
+            speed: 0.05 + level * 0.02, // Velocidad aumenta con el nivel
+            image: enemyType // Asignar la imagen correspondiente
+        });
+    }
+}
+
+// Dibujar el fondo estático
+function drawBackground() {
+    ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+}
+
+// Dibujar al jugador (pez) con animación
+function drawPlayer() {
+    const playerWidth = tileSize;
+    const playerHeight = tileSize;
+
+    // Guardar el estado del contexto
+    ctx.save();
+
+    // Calcular la posición central del jugador
+    const centerX = player.x * tileSize + tileSize / 2;
+    const centerY = player.y * tileSize + tileSize / 2;
+
+    // Rotar el jugador según su dirección
+    ctx.translate(centerX, centerY); // Mover el origen al centro del jugador
+    if (player.direction === 'up') {
+        ctx.rotate(-Math.PI / 2); // Girar hacia arriba
+    } else if (player.direction === 'down') {
+        ctx.rotate(Math.PI / 2); // Girar hacia abajo
+    } else if (player.direction === 'left') {
+        ctx.scale(-1, 1); // Voltear horizontalmente para mirar a la izquierda
+    }
+
+    // Dibujar el cuerpo del jugador
+    ctx.drawImage(
+        playerImage,
+        -playerWidth / 2, // Ajustar para centrar después de rotar
+        -playerHeight / 2,
+        playerWidth,
+        playerHeight
+    );
+
+    // Animación de la aleta trasera
+    const tailX = -playerWidth / 2; // Posición de la aleta trasera
+    const tailY = -playerHeight / 4;
+    const tailLength = playerWidth / 4;
+    const tailWidth = playerHeight / 8;
+
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(
+        tailX - tailLength * Math.cos(player.tailAngle),
+        tailY + tailWidth * Math.sin(player.tailAngle)
+    );
+    ctx.lineTo(
+        tailX - tailLength * Math.cos(player.tailAngle),
+        tailY - tailWidth * Math.sin(player.tailAngle)
+    );
+    ctx.closePath();
+    ctx.fillStyle = '#FFA500'; // Color de la aleta
+    ctx.fill();
+
+    // Actualizar el ángulo de la aleta
+    player.tailAngle += player.tailSpeed;
+    if (player.tailAngle > Math.PI / 4 || player.tailAngle < -Math.PI / 4) {
+        player.tailSpeed *= -1; // Invertir la dirección de oscilación
+    }
+
+    // Restaurar el estado del contexto
+    ctx.restore();
+}
+
+// Dibujar las criptomonedas
+function drawCoins() {
+    coins.forEach(coin => {
+        // Dibujar la imagen de la criptomoneda más grande
+        ctx.drawImage(
+            coin.type.image,
+            coin.x * tileSize + tileSize / 8, // Centrar la imagen
+            coin.y * tileSize + tileSize / 8,
+            tileSize / 1.5, // Aumentar el tamaño
+            tileSize / 1.5
+        );
+    });
+}
+
+// Dibujar los enemigos
+function drawEnemies() {
+    enemies.forEach(enemy => {
+        const enemyWidth = tileSize * 1.5; // Tamaño aumentado
+        const enemyHeight = tileSize * 1.5;
+
+        // Guardar el estado del contexto
+        ctx.save();
+
+        // Calcular la posición central del enemigo
+        const centerX = enemy.x * tileSize + tileSize / 2;
+        const centerY = enemy.y * tileSize + tileSize / 2;
+
+        // Rotar el enemigo según su dirección
+        ctx.translate(centerX, centerY); // Mover el origen al centro del enemigo
+        if (enemy.direction === 'horizontal') {
+            if (enemy.speed < 0) {
+                ctx.scale(-1, 1); // Voltear horizontalmente si va hacia la izquierda
+            }
+        } else if (enemy.direction === 'vertical') {
+            if (enemy.speed < 0) {
+                ctx.rotate(-Math.PI / 2); // Girar hacia arriba
+            } else {
+                ctx.rotate(Math.PI / 2); // Girar hacia abajo
+            }
+        }
+
+        // Dibujar la imagen del enemigo
+        ctx.drawImage(
+            enemy.image,
+            -enemyWidth / 2, // Ajustar para centrar después de rotar
+            -enemyHeight / 2,
+            enemyWidth,
+            enemyHeight
+        );
+
+        // Restaurar el estado del contexto
+        ctx.restore();
+    });
+}
+
+// Dibujar el temporizador, nivel y score
+function drawGameInfo() {
+    const minutes = Math.floor(timeElapsed / 60);
+    const seconds = timeElapsed % 60;
+    const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '20px Arial';
+    ctx.textAlign = 'right';
+
+    // Mostrar información en el costado derecho
+    ctx.fillText(`Tiempo: ${formattedTime}`, canvas.width - 10, 30);
+    ctx.fillText(`Nivel: ${level}`, canvas.width - 10, 60);
+    ctx.fillText(`Score: ${score}`, canvas.width - 10, 90);
+}
+
+// Reiniciar el nivel actual o volver al primer nivel
+function resetLevel() {
+    consecutiveLosses++;
+    if (consecutiveLosses >= 3) {
+        level = 1; // Volver al primer nivel
+        consecutiveLosses = 0; // Reiniciar contador de pérdidas
+    }
+
+    // Reiniciar el nivel actual
+    player = { 
+        x: 1, 
+        y: 1, 
+        targetX: 1, 
+        targetY: 1, 
+        direction: 'right', 
+        frame: 0, 
+        animationFrames: [0, 1, 2, 1],
+        tailAngle: 0,
+        tailSpeed: 0.05
+    };
+    coins = [];
+    enemies = [];
+    score = 0; // Reiniciar el score
+    timeElapsed = 0; // Reiniciar el contador de tiempo
+    generateCoins();
+    generateEnemies();
+}
+
+// Manejar el movimiento del jugador
+document.addEventListener('keydown', event => {
+    if (gameOver) {
+        resetLevel();
+        gameOver = false;
+        return;
+    }
+
+    if (event.key === 'ArrowUp' && player.targetY > 0) {
+        player.targetY--;
+        player.direction = 'up';
+    } else if (event.key === 'ArrowDown' && player.targetY < rows - 1) {
+        player.targetY++;
+        player.direction = 'down';
+    } else if (event.key === 'ArrowLeft' && player.targetX > 0) {
+        player.targetX--;
+        player.direction = 'left';
+    } else if (event.key === 'ArrowRight' && player.targetX < cols - 1) {
+        player.targetX++;
+        player.direction = 'right';
+    }
+});
+
+// Actualizar el estado del juego
+function updateGame() {
+    if (gameOver) {
+        ctx.fillStyle = '#fff';
+        ctx.font = '30px Arial';
+        ctx.fillText('¡Game Over!', canvas.width / 2 - 80, canvas.height / 2);
+        return;
+    }
+
+    if (gameWon) {
+        ctx.fillStyle = '#fff';
+        ctx.font = '30px Arial';
+        ctx.fillText('¡Ganaste!', canvas.width / 2 - 60, canvas.height / 2);
+        return;
+    }
+
+    // Incrementar el temporizador
+    timeElapsed++;
+
+    // Movimiento fluido del jugador
+    if (player.x !== player.targetX || player.y !== player.targetY) {
+        const dx = player.targetX - player.x;
+        const dy = player.targetY - player.y;
+        player.x += dx * 0.1; // Interpolación para movimiento fluido
+        player.y += dy * 0.1;
+    }
+
+    // Movimiento lineal de los enemigos
+    enemies.forEach(enemy => {
+        if (enemy.direction === 'horizontal') {
+            enemy.x += enemy.speed;
+            if (enemy.x < 0 || enemy.x >= cols) {
+                enemy.speed *= -1; // Cambiar dirección al llegar al borde
+            }
+        } else if (enemy.direction === 'vertical') {
+            enemy.y += enemy.speed;
+            if (enemy.y < 0 || enemy.y >= rows) {
+                enemy.speed *= -1; // Cambiar dirección al llegar al borde
+            }
+        }
+    });
+
+    // Verificar colisiones con enemigos
+    enemies.forEach(enemy => {
+        if (Math.abs(enemy.x - player.x) < 0.5 && Math.abs(enemy.y - player.y) < 0.5) {
+            gameOver = true;
+        }
+    });
+
+    // Verificar si el jugador recoge una moneda
+    coins = coins.filter(coin => {
+        if (Math.abs(coin.x - player.x) < 0.5 && Math.abs(coin.y - player.y) < 0.5) {
+            score++;
+            return false; // Eliminar la moneda
+        }
+        return true;
+    });
+
+    // Verificar si el jugador ha ganado el nivel
+    if (coins.length === 0) {
+        level++; // Incrementar el nivel
+        generateCoins(); // Generar nuevas monedas
+        generateEnemies(); // Generar más enemigos
+        consecutiveLosses = 0; // Reiniciar contador de pérdidas
+    }
+
+    // Dibujar todos los elementos
+    drawBackground();
+    drawCoins();
+    drawEnemies();
+    drawPlayer();
+    drawGameInfo();
+}
+
+// Inicializar el juego
+function initGame() {
+    generateCoins();
+    generateEnemies();
+    setInterval(updateGame, 20); // Intervalo más corto para mayor fluidez
+}
