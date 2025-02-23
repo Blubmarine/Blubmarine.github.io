@@ -57,7 +57,7 @@
             frame: 0, 
             animationFrames: [0, 1, 2, 1], // Frames de animación para el jugador
             tailAngle: 0, // Ángulo de la aleta trasera
-            tailSpeed: 0.05 // Velocidad de oscilación de la aleta
+            tailSpeed: 0.05 // Velocidad de oscilación de la cola
         };
         let coins = [];
         let enemies = [];
@@ -68,11 +68,11 @@
         let level = 1; // Nivel actual
         let consecutiveLosses = 0; // Contador de pérdidas consecutivas
 
-        // Fondo estático
+        // Imagen del fondo principal
         const backgroundImage = new Image();
-        backgroundImage.src = 'https://i.postimg.cc/9XGyMXr5/istockphoto-1085925138-612x612.jpg'; // Fondo estático
+        backgroundImage.src = 'https://i.postimg.cc/ZK2KLhMY/istockphoto-1085925138-612x612.jpg';
 
-        // Imagen del jugador principal (nueva imagen)
+        // Imagen del jugador principal (pez) con tamaño aumentado
         const playerImage = new Image();
         playerImage.src = 'https://i.postimg.cc/NGH6xNKt/upscalemedia-transformed.png';
 
@@ -83,7 +83,7 @@
         const enemyImage2 = new Image();
         enemyImage2.src = 'https://i.postimg.cc/ZKwBBWmg/images-1-removebg-preview.png'; // Segundo tipo de enemigo
 
-        // Imágenes de las criptomonedas (actualizadas)
+        // Imágenes de las criptomonedas
         const cryptoImages = [
             'https://i.postimg.cc/7h0SYLFh/Ghqra-Ggac-AA91tb-removebg-preview.png',
             'https://i.postimg.cc/cHVQS35P/Animaci-n-2.png',
@@ -120,10 +120,11 @@
             }
         }
 
-        // Generar enemigos (redes de pesca)
+        // Generar enemigos (redes de pesca) con dificultad progresiva
         function generateEnemies() {
             enemies = []; // Limpiar los enemigos anteriores
-            const enemyCount = Math.max(5, level + 3); // Aumentar el número de enemigos según el nivel
+            const baseEnemyCount = 5 + level * 2; // Aumentar enemigos con el nivel
+            const enemyCount = Math.max(baseEnemyCount, level + 3); // Mínimo de enemigos
             const usedPositions = new Set();
 
             for (let i = 0; i < enemyCount; i++) {
@@ -139,21 +140,21 @@
                     x: col,
                     y: row,
                     direction: Math.random() > 0.5 ? 'horizontal' : 'vertical',
-                    speed: 0.05 + level * 0.02, // Velocidad aumenta con el nivel
+                    speed: 0.03 + level * 0.02, // Velocidad aumenta con el nivel
                     image: enemyType // Asignar la imagen correspondiente
                 });
             }
         }
 
-        // Dibujar el fondo estático
+        // Dibujar el fondo principal
         function drawBackground() {
             ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
         }
 
-        // Dibujar al jugador (pez) con animación
+        // Dibujar al jugador (pez) con animación y tamaño aumentado
         function drawPlayer() {
-            const playerWidth = tileSize;
-            const playerHeight = tileSize;
+            const playerWidth = tileSize * 1.3; // Aumentar el tamaño del jugador en un 30%
+            const playerHeight = tileSize * 1.3;
 
             // Guardar el estado del contexto
             ctx.save();
@@ -211,16 +212,16 @@
             ctx.restore();
         }
 
-        // Dibujar las criptomonedas
+        // Dibujar las criptomonedas con tamaño reducido
         function drawCoins() {
             coins.forEach(coin => {
-                // Dibujar la imagen de la criptomoneda más grande
+                // Dibujar la imagen de la criptomoneda más pequeña (reducida en un 25%)
                 ctx.drawImage(
                     coin.type.image,
-                    coin.x * tileSize + tileSize / 8, // Centrar la imagen
-                    coin.y * tileSize + tileSize / 8,
-                    tileSize / 1.5, // Aumentar el tamaño
-                    tileSize / 1.5
+                    coin.x * tileSize + tileSize / 4, // Centrar la imagen
+                    coin.y * tileSize + tileSize / 4,
+                    tileSize * 0.75, // Reducir el tamaño en un 25%
+                    tileSize * 0.75
                 );
             });
         }
