@@ -57,11 +57,9 @@
             frame: 0, 
             animationFrames: [0, 1, 2, 1], // Frames de animación para el jugador
             tailAngle: 0, // Ángulo de la aleta trasera
-            tailSpeed: 0.05, // Velocidad de oscilación de la cola
-            sizeMultiplier: 2 // Tamaño inicial del jugador (100% más grande)
+            tailSpeed: 0.05 // Velocidad de oscilación de la cola
         };
         let coins = [];
-        let specialCoins = []; // Monedas exclusivas que aumentan el tamaño
         let enemies = [];
         let score = 0;
         let gameOver = false;
@@ -85,7 +83,7 @@
         const enemyImage2 = new Image();
         enemyImage2.src = 'https://i.postimg.cc/ZKwBBWmg/images-1-removebg-preview.png'; // Segundo tipo de enemigo
 
-        // Imágenes de las criptomonedas normales
+        // Imágenes de las criptomonedas
         const cryptoImages = [
             'https://i.postimg.cc/7h0SYLFh/Ghqra-Ggac-AA91tb-removebg-preview.png',
             'https://i.postimg.cc/cHVQS35P/Animaci-n-2.png',
@@ -98,25 +96,20 @@
             return { name: `Crypto${index + 1}`, image: img };
         });
 
-        // Imagen de las monedas exclusivas
-        const specialCoinImage = new Image();
-        specialCoinImage.src = 'https://i.postimg.cc/HkFzHjPG/descarga-1-removebg-preview.png';
-
         // Esperar a que todas las imágenes se carguen antes de iniciar el juego
         Promise.all([
             new Promise(resolve => backgroundImage.onload = resolve),
             new Promise(resolve => playerImage.onload = resolve),
             new Promise(resolve => enemyImage1.onload = resolve),
             new Promise(resolve => enemyImage2.onload = resolve),
-            ...cryptoTypes.map(crypto => new Promise(resolve => crypto.image.onload = resolve)),
-            new Promise(resolve => specialCoinImage.onload = resolve)
+            ...cryptoTypes.map(crypto => new Promise(resolve => crypto.image.onload = resolve))
         ]).then(() => {
             initGame(); // Iniciar el juego después de cargar todas las imágenes
         }).catch(error => {
             console.error("Error al cargar las imágenes:", error);
         });
 
-        // Generar monedas normales en todo el mapa
+        // Generar monedas en todo el mapa
         function generateCoins() {
             coins = []; // Limpiar las monedas anteriores
             for (let row = 0; row < rows; row++) {
@@ -127,28 +120,12 @@
             }
         }
 
-        // Generar monedas especiales (5 por nivel)
-        function generateSpecialCoins() {
-            specialCoins = []; // Limpiar las monedas especiales anteriores
-            const usedPositions = new Set();
-
-            for (let i = 0; i < 5; i++) {
-                let row, col;
-                do {
-                    row = Math.floor(Math.random() * rows);
-                    col = Math.floor(Math.random() * cols);
-                } while (usedPositions.has(`${row},${col}`)); // Evitar posiciones repetidas
-
-                usedPositions.add(`${row},${col}`);
-                specialCoins.push({ x: col, y: row });
-            }
-        }
-
-        // Generar enemigos (redes de pesca) con dificultad progresiva
+        // Generar enemigos (redes de pesca) con reducción del 15%
         function generateEnemies() {
             enemies = []; // Limpiar los enemigos anteriores
-            const baseEnemyCount = 8 + Math.floor(level * 1.5); // Aumentar enemigos con el nivel
-            const enemyCount = Math.max(baseEnemyCount, level + 3); // Mínimo de enemigos
+            const baseEnemyCount = 8; // Cantidad base de enemigos
+            const reducedEnemyCount = Math.floor(baseEnemyCount * 0.85); // Reducir en un 15%
+            const enemyCount = Math.max(reducedEnemyCount + Math.floor(level * 1.5), level + 3); // Aumentar enemigos con el nivel
             const usedPositions = new Set();
 
             for (let i = 0; i < enemyCount; i++) {
@@ -164,7 +141,7 @@
                     x: col,
                     y: row,
                     direction: Math.random() > 0.5 ? 'horizontal' : 'vertical',
-                    speed: 0.03 + level * 0.02, // Velocidad aumenta con el nivel
+                    speed: 0.05 + level * 0.03, // Velocidad aumenta con el nivel
                     image: enemyType // Asignar la imagen correspondiente
                 });
             }
@@ -177,8 +154,8 @@
 
         // Dibujar al jugador (pez) con animación y tamaño aumentado
         function drawPlayer() {
-            const playerWidth = tileSize * player.sizeMultiplier; // Tamaño dinámico del jugador
-            const playerHeight = tileSize * player.sizeMultiplier;
+            const playerWidth = tileSize * 1.3; // Aumentar el tamaño del jugador en un 30%
+            const playerHeight = tileSize * 1.3;
 
             // Guardar el estado del contexto
             ctx.save();
@@ -236,26 +213,12 @@
             ctx.restore();
         }
 
-        // Dibujar las criptomonedas normales
+        // Dibujar las criptomonedas con tamaño reducido
         function drawCoins() {
             coins.forEach(coin => {
                 // Dibujar la imagen de la criptomoneda más pequeña (reducida en un 25%)
                 ctx.drawImage(
                     coin.type.image,
-                    coin.x * tileSize + tileSize / 4, // Centrar la imagen
-                    coin.y * tileSize + tileSize / 4,
-                    tileSize * 0.75, // Reducir el tamaño en un 25%
-                    tileSize * 0.75
-                );
-            });
-        }
-
-        // Dibujar las monedas especiales
-        function drawSpecialCoins() {
-            specialCoins.forEach(coin => {
-                // Dibujar la imagen de la moneda especial
-                ctx.drawImage(
-                    specialCoinImage,
                     coin.x * tileSize + tileSize / 4, // Centrar la imagen
                     coin.y * tileSize + tileSize / 4,
                     tileSize * 0.75, // Reducir el tamaño en un 25%
@@ -339,16 +302,13 @@
                 frame: 0, 
                 animationFrames: [0, 1, 2, 1],
                 tailAngle: 0,
-                tailSpeed: 0.05,
-                sizeMultiplier: 2 // Reiniciar tamaño del jugador
+                tailSpeed: 0.05
             };
             coins = [];
-            specialCoins = [];
             enemies = [];
             score = 0; // Reiniciar el score
             timeElapsed = 0; // Reiniciar el contador de tiempo
             generateCoins();
-            generateSpecialCoins();
             generateEnemies();
         }
 
@@ -398,4 +358,63 @@
             if (player.x !== player.targetX || player.y !== player.targetY) {
                 const dx = player.targetX - player.x;
                 const dy = player.targetY - player.y;
-                player.x +=
+                player.x += dx * 0.1; // Interpolación para movimiento fluido
+                player.y += dy * 0.1;
+            }
+
+            // Movimiento lineal de los enemigos
+            enemies.forEach(enemy => {
+                if (enemy.direction === 'horizontal') {
+                    enemy.x += enemy.speed;
+                    if (enemy.x < 0 || enemy.x >= cols) {
+                        enemy.speed *= -1; // Cambiar dirección al llegar al borde
+                    }
+                } else if (enemy.direction === 'vertical') {
+                    enemy.y += enemy.speed;
+                    if (enemy.y < 0 || enemy.y >= rows) {
+                        enemy.speed *= -1; // Cambiar dirección al llegar al borde
+                    }
+                }
+            });
+
+            // Verificar colisiones con enemigos
+            enemies.forEach(enemy => {
+                if (Math.abs(enemy.x - player.x) < 0.5 && Math.abs(enemy.y - player.y) < 0.5) {
+                    gameOver = true;
+                }
+            });
+
+            // Verificar si el jugador recoge una moneda
+            coins = coins.filter(coin => {
+                if (Math.abs(coin.x - player.x) < 0.5 && Math.abs(coin.y - player.y) < 0.5) {
+                    score++;
+                    return false; // Eliminar la moneda
+                }
+                return true;
+            });
+
+            // Verificar si el jugador ha ganado el nivel
+            if (coins.length === 0) {
+                level++; // Incrementar el nivel
+                generateCoins(); // Generar nuevas monedas
+                generateEnemies(); // Generar más enemigos
+                consecutiveLosses = 0; // Reiniciar contador de pérdidas
+            }
+
+            // Dibujar todos los elementos
+            drawBackground();
+            drawCoins();
+            drawEnemies();
+            drawPlayer();
+            drawGameInfo();
+        }
+
+        // Inicializar el juego
+        function initGame() {
+            generateCoins();
+            generateEnemies();
+            setInterval(updateGame, 20); // Intervalo más corto para mayor fluidez
+        }
+    </script>
+</body>
+</html>
