@@ -3,418 +3,314 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blubmarine Game</title>
+    <title>Oso Runner</title>
     <style>
         body {
             margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-color: #00f; /* Fondo azul para simular el mar */
             overflow: hidden;
+            background: #87CEEB;
         }
-
-        #game-container {
-            position: relative;
-            width: 100vw; /* Ocupar todo el ancho de la pantalla */
-            height: 100vh; /* Ocupar todo el alto de la pantalla */
-            border: none;
-            overflow: hidden;
-        }
-
         canvas {
             display: block;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
         }
     </style>
 </head>
 <body>
-    <div id="game-container">
-        <canvas id="game-canvas"></canvas>
-    </div>
+<canvas id="game"></canvas>
 
-    <script>
-        const canvas = document.getElementById('game-canvas');
-        const ctx = canvas.getContext('2d');
+<audio id="backgroundMusic" loop>
+    <source src="https://www.soundjay.com/misc/sounds/mario-bros-theme-song.mp3" type="audio/mpeg">
+    Tu navegador no soporta el elemento de audio.
+</audio>
 
-        // Configuración del canvas (pantalla completa)
-        canvas.width = window.innerWidth; // Ancho completo
-        canvas.height = window.innerHeight; // Alto completo
+<audio id="jumpSound">
+    <source src="https://www.soundjay.com/misc/sounds/mario-jump-01.mp3" type="audio/mpeg">
+    Tu navegador no soporta el elemento de audio.
+</audio>
 
-        // Variables del juego
-        const tileSize = 40; // Tamaño de las celdas
-        const rows = Math.floor(canvas.height / tileSize);
-        const cols = Math.floor(canvas.width / tileSize);
+<audio id="honeySound">
+    <source src="https://www.soundjay.com/human/sounds/eating-chip-01.mp3" type="audio/mpeg">
+    Tu navegador no soporta el elemento de audio.
+</audio>
 
-        let player = { 
-            x: 1, 
-            y: 1, 
-            targetX: 1, 
-            targetY: 1, 
-            direction: 'right', 
-            frame: 0, 
-            animationFrames: [0, 1, 2, 1], // Frames de animación para el jugador
-            tailAngle: 0, // Ángulo de la aleta trasera
-            tailSpeed: 0.05 // Velocidad de oscilación de la cola
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// Ajuste de tamaño responsivo
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Imágenes
+const bearFrames = [
+    'https://i.postimg.cc/8kLnFnB4/photo-5934797904696949069-y-removebg-preview.png',
+    'https://i.postimg.cc/8kLnFnB4/photo-5934797904696949069-y-removebg-preview.png' // Puedes agregar más frames si deseas
+];
+
+const obstacleImg = new Image();
+obstacleImg.src = 'https://i.postimg.cc/tJ043jC2/images-1-removebg-preview.png';
+
+const bgImg = new Image();
+bgImg.src = 'https://i.postimg.cc/BZ8hKTRh/piclumen-1741449981986.png'; // Nuevo fondo
+
+const honeyImg = new Image();
+honeyImg.src = 'https://i.postimg.cc/MKqMxvp5/images-1-removebg-preview-1.png'; // Tarros de miel
+
+// Configuración
+let currentFrame = 0; // Frame actual de la animación del jugador
+let frameTimer = 0; // Temporizador para cambiar frames
+
+const player = {
+    x: canvas.width * 0.1, // Posición fija a la izquierda
+    y: canvas.height - 130, // Reducir altura del suelo
+    width: canvas.width * 0.08,
+    height: canvas.height * 0.12,
+    vy: 0,
+    gravity: 0.8,
+    jumpPower: -15, // Altura de salto reducida
+    grounded: true,
+    canDoubleJump: true,
+    boostedJump: false, // Indica si tiene un salto potenciado
+    isCrouching: false // Indica si el jugador está agachado
+};
+
+const obstacles = [];
+const honeys = [];
+let scoreMiel = 0; // Cambiado a "scoreMiel"
+let time = 0; // Cronómetro
+let gameOver = false;
+
+// Controles
+document.addEventListener('keydown', e => {
+    if (!gameOver) {
+        if ((e.code === 'Space' || e.key === 'w' || e.code === 'ArrowUp') && (player.grounded || player.canDoubleJump)) {
+            if (player.grounded) {
+                player.vy = player.boostedJump ? -20 : player.jumpPower; // Salto menos alto
+                player.grounded = false;
+                player.canDoubleJump = true;
+                document.getElementById('jumpSound').play(); // Reproducir sonido de salto
+            } else if (player.canDoubleJump) {
+                player.vy = player.boostedJump ? -20 : player.jumpPower; // Salto menos alto
+                player.canDoubleJump = false;
+                document.getElementById('jumpSound').play(); // Reproducir sonido de salto
+            }
+        }
+
+        if ((e.key === 's' || e.code === 'ArrowDown') && player.grounded) {
+            player.isCrouching = true; // Activar agachamiento
+            player.height = canvas.height * 0.06; // Reducir altura del jugador
+            player.y = canvas.height - player.height - 30; // Ajustar posición
+        }
+    }
+
+    if (gameOver && e.code === 'Space') {
+        document.location.reload();
+    }
+});
+
+document.addEventListener('keyup', e => {
+    if ((e.key === 's' || e.code === 'ArrowDown') && player.grounded) {
+        player.isCrouching = false; // Desactivar agachamiento
+        player.height = canvas.height * 0.12; // Restaurar altura del jugador
+        player.y = canvas.height - player.height - 30; // Ajustar posición
+    }
+});
+
+// Generar obstáculos
+function createObstacle() {
+    const lastObstacle = obstacles[obstacles.length - 1];
+    const minDistance = canvas.width * 0.25; // Distancia mínima entre obstáculos
+
+    if (!lastObstacle || lastObstacle.x + lastObstacle.width + minDistance < canvas.width) {
+        const isHighObstacle = Math.random() > 0.7; // 30% de probabilidad de ser un obstáculo alto
+        const obstacleHeight = canvas.height * 0.12; // Todos los obstáculos tienen el mismo tamaño
+        const obstacleY = isHighObstacle 
+            ? canvas.height - obstacleHeight - 100 // Obstáculo alto (posición más arriba)
+            : canvas.height - obstacleHeight - 30; // Obstáculo bajo (posición normal)
+
+        const obstacle = {
+            x: canvas.width + Math.random() * 300 + 100, // Obstáculos más frecuentes
+            y: obstacleY, // Posición vertical ajustada
+            width: canvas.width * 0.06, // Obstáculos más pequeños
+            height: obstacleHeight
         };
-        let coins = [];
-        let enemies = [];
-        let score = 0;
-        let gameOver = false;
-        let gameWon = false;
-        let timeElapsed = 0; // Tiempo transcurrido en segundos
-        let level = 1; // Nivel actual
-        let consecutiveLosses = 0; // Contador de pérdidas consecutivas
+        obstacles.push(obstacle);
+    }
+}
+setInterval(createObstacle, 1000); // Intervalo reducido para más obstáculos
 
-        // Imagen del fondo principal
-        const backgroundImage = new Image();
-        backgroundImage.src = 'https://i.postimg.cc/ZK2KLhMY/istockphoto-1085925138-612x612.jpg';
+// Generar tarros de miel
+function createHoney() {
+    if (honeys.length >= 3) return; // Máximo 3 tarros en el mapa
 
-        // Imagen del jugador principal (pez) con tamaño aumentado
-        const playerImage = new Image();
-        playerImage.src = 'https://i.postimg.cc/NGH6xNKt/upscalemedia-transformed.png';
+    const lastHoney = honeys[honeys.length - 1];
+    const minDistance = canvas.width * 0.4; // Distancia mínima entre tarros
 
-        // Imágenes de los enemigos
-        const enemyImage1 = new Image();
-        enemyImage1.src = 'https://i.postimg.cc/jjV1zdQ6/images-removebg-preview.png'; // Primer tipo de enemigo
+    if (!lastHoney || lastHoney.x + lastHoney.width + minDistance < canvas.width) {
+        const honey = {
+            x: canvas.width + Math.random() * 600 + 300,
+            y: canvas.height - 130, // Ligeramente elevados (ajustado al nuevo tamaño)
+            width: canvas.width * 0.05,
+            height: canvas.height * 0.07
+        };
 
-        const enemyImage2 = new Image();
-        enemyImage2.src = 'https://i.postimg.cc/ZKwBBWmg/images-1-removebg-preview.png'; // Segundo tipo de enemigo
+        // Verificar que no haya obstáculos cerca
+        const isSafe = obstacles.every(obstacle => 
+            Math.abs(honey.x - obstacle.x) > canvas.width * 0.2
+        );
 
-        // Imágenes de las criptomonedas
-        const cryptoImages = [
-            'https://i.postimg.cc/7h0SYLFh/Ghqra-Ggac-AA91tb-removebg-preview.png',
-            'https://i.postimg.cc/cHVQS35P/Animaci-n-2.png',
-            'https://i.postimg.cc/JnybvxKb/Animaci-n-1.png'
-        ];
-
-        const cryptoTypes = cryptoImages.map((imageSrc, index) => {
-            const img = new Image();
-            img.src = imageSrc;
-            return { name: `Crypto${index + 1}`, image: img };
-        });
-
-        // Esperar a que todas las imágenes se carguen antes de iniciar el juego
-        Promise.all([
-            new Promise(resolve => backgroundImage.onload = resolve),
-            new Promise(resolve => playerImage.onload = resolve),
-            new Promise(resolve => enemyImage1.onload = resolve),
-            new Promise(resolve => enemyImage2.onload = resolve),
-            ...cryptoTypes.map(crypto => new Promise(resolve => crypto.image.onload = resolve))
-        ]).then(() => {
-            initGame(); // Iniciar el juego después de cargar todas las imágenes
-        }).catch(error => {
-            console.error("Error al cargar las imágenes:", error);
-        });
-
-        // Generar monedas en todo el mapa
-        function generateCoins() {
-            coins = []; // Limpiar las monedas anteriores
-            for (let row = 0; row < rows; row++) {
-                for (let col = 0; col < cols; col++) {
-                    const randomCrypto = cryptoTypes[(row * cols + col) % cryptoTypes.length]; // Distribución equitativa
-                    coins.push({ x: col, y: row, type: randomCrypto });
-                }
-            }
+        if (isSafe) {
+            honeys.push(honey);
         }
+    }
+}
+setInterval(createHoney, 4000);
 
-        // Generar enemigos (redes de pesca) con reducción del 15%
-        function generateEnemies() {
-            enemies = []; // Limpiar los enemigos anteriores
-            const baseEnemyCount = 8; // Cantidad base de enemigos
-            const reducedEnemyCount = Math.floor(baseEnemyCount * 0.85); // Reducir en un 15%
-            const enemyCount = Math.max(reducedEnemyCount + Math.floor(level * 1.5), level + 3); // Aumentar enemigos con el nivel
-            const usedPositions = new Set();
+// Lógica principal
+function update() {
+    if (gameOver) return;
 
-            for (let i = 0; i < enemyCount; i++) {
-                let row, col;
-                do {
-                    row = Math.floor(Math.random() * rows);
-                    col = Math.floor(Math.random() * cols);
-                } while (usedPositions.has(`${row},${col}`)); // Evitar posiciones repetidas
+    // Incrementar tiempo
+    time += 1 / 60;
 
-                usedPositions.add(`${row},${col}`);
-                const enemyType = i % 2 === 0 ? enemyImage1 : enemyImage2; // Alternar entre los dos tipos de enemigos
-                enemies.push({
-                    x: col,
-                    y: row,
-                    direction: Math.random() > 0.5 ? 'horizontal' : 'vertical',
-                    speed: 0.05 + level * 0.03, // Velocidad aumenta con el nivel
-                    image: enemyType // Asignar la imagen correspondiente
-                });
-            }
+    // Animación del jugador
+    frameTimer += 1 / 60;
+    if (frameTimer > 0.2) { // Cambiar frame cada 0.2 segundos
+        frameTimer = 0;
+        currentFrame = (currentFrame + 1) % bearFrames.length;
+    }
+
+    // Gravedad y salto
+    player.vy += player.gravity;
+    player.y += player.vy;
+
+    // Control de suelo
+    if (player.y + player.height >= canvas.height - 30) { // Reducir altura del suelo
+        player.y = canvas.height - player.height - 30;
+        player.vy = 0;
+        player.grounded = true;
+    }
+
+    // Mover obstáculos hacia la izquierda (velocidad aumentada)
+    obstacles.forEach(obstacle => {
+        obstacle.x -= 8 + (time * 0.15); // Velocidad incrementada para mayor fluidez
+    });
+
+    // Eliminar obstáculos fuera de pantalla
+    while (obstacles.length && obstacles[0].x + obstacles[0].width < 0) {
+        obstacles.shift();
+        scoreMiel++; // Incrementar ScoreMiel por esquivar obstáculos
+    }
+
+    // Mover tarros de miel hacia la izquierda
+    honeys.forEach(honey => {
+        honey.x -= 8 + (time * 0.15); // Velocidad incrementada para mayor fluidez
+    });
+
+    // Eliminar tarros de miel fuera de pantalla
+    while (honeys.length && honeys[0].x + honeys[0].width < 0) {
+        honeys.shift();
+    }
+
+    // Colisiones precisas con obstáculos
+    obstacles.forEach(obstacle => {
+        if (
+            player.x < obstacle.x + obstacle.width &&
+            player.x + player.width > obstacle.x &&
+            player.y < obstacle.y + obstacle.height &&
+            player.y + player.height > obstacle.y
+        ) {
+            gameOver = true;
         }
+    });
 
-        // Dibujar el fondo principal
-        function drawBackground() {
-            ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+    // Colisiones con tarros de miel
+    honeys.forEach((honey, index) => {
+        if (
+            player.x < honey.x + honey.width &&
+            player.x + player.width > honey.x &&
+            player.y < honey.y + honey.height &&
+            player.y + player.height > honey.y
+        ) {
+            player.boostedJump = true; // Activar salto potenciado
+            scoreMiel++; // Incrementar ScoreMiel al recoger un tarro
+            honeys.splice(index, 1); // Remover tarro de miel
+            document.getElementById('honeySound').play(); // Reproducir sonido de comer
         }
+    });
+}
 
-        // Dibujar al jugador (pez) con animación y tamaño aumentado
-        function drawPlayer() {
-            const playerWidth = tileSize * 1.3; // Aumentar el tamaño del jugador en un 30%
-            const playerHeight = tileSize * 1.3;
+// Dibujar elementos
+function draw() {
+    // Fondo ajustado a todo el mapa
+    ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
 
-            // Guardar el estado del contexto
-            ctx.save();
+    // Suelo plano (sin imagen de césped)
+    ctx.fillStyle = '#8B4513'; // Color marrón para el suelo
+    ctx.fillRect(0, canvas.height - 30, canvas.width, 30); // Reducir altura del suelo
 
-            // Calcular la posición central del jugador
-            const centerX = player.x * tileSize + tileSize / 2;
-            const centerY = player.y * tileSize + tileSize / 2;
+    // Dibujar obstáculos
+    obstacles.forEach(obstacle => {
+        ctx.drawImage(obstacleImg, obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+    });
 
-            // Rotar el jugador según su dirección
-            ctx.translate(centerX, centerY); // Mover el origen al centro del jugador
-            if (player.direction === 'up') {
-                ctx.rotate(-Math.PI / 2); // Girar hacia arriba
-            } else if (player.direction === 'down') {
-                ctx.rotate(Math.PI / 2); // Girar hacia abajo
-            } else if (player.direction === 'left') {
-                ctx.scale(-1, 1); // Voltear horizontalmente para mirar a la izquierda
-            }
+    // Dibujar tarros de miel
+    honeys.forEach(honey => {
+        ctx.drawImage(honeyImg, honey.x, honey.y, honey.width, honey.height);
+    });
 
-            // Dibujar el cuerpo del jugador
-            ctx.drawImage(
-                playerImage,
-                -playerWidth / 2, // Ajustar para centrar después de rotar
-                -playerHeight / 2,
-                playerWidth,
-                playerHeight
-            );
+    // Dibujar jugador con animación
+    const currentBearFrame = new Image();
+    currentBearFrame.src = bearFrames[currentFrame];
+    ctx.drawImage(currentBearFrame, player.x, player.y, player.width, player.height);
 
-            // Animación de la aleta trasera
-            const tailX = -playerWidth / 2; // Posición de la aleta trasera
-            const tailY = -playerHeight / 4;
-            const tailLength = playerWidth / 4;
-            const tailWidth = playerHeight / 8;
+    // Interfaz (en la parte superior central)
+    ctx.fillStyle = '#000';
+    ctx.font = `${Math.min(canvas.width, canvas.height) * 0.04}px Arial`;
+    ctx.textAlign = 'center';
 
-            ctx.beginPath();
-            ctx.moveTo(tailX, tailY);
-            ctx.lineTo(
-                tailX - tailLength * Math.cos(player.tailAngle),
-                tailY + tailWidth * Math.sin(player.tailAngle)
-            );
-            ctx.lineTo(
-                tailX - tailLength * Math.cos(player.tailAngle),
-                tailY - tailWidth * Math.sin(player.tailAngle)
-            );
-            ctx.closePath();
-            ctx.fillStyle = '#FFA500'; // Color de la aleta
-            ctx.fill();
+    // Formato MM:SS para el cronómetro
+    const minutes = Math.floor(time / 60).toString().padStart(2, '0');
+    const seconds = Math.floor(time % 60).toString().padStart(2, '0');
+    ctx.fillText(`Tiempo: ${minutes}:${seconds} | ScoreMiel: ${scoreMiel}`, canvas.width / 2, canvas.height * 0.05);
 
-            // Actualizar el ángulo de la aleta
-            player.tailAngle += player.tailSpeed;
-            if (player.tailAngle > Math.PI / 4 || player.tailAngle < -Math.PI / 4) {
-                player.tailSpeed *= -1; // Invertir la dirección de oscilación
-            }
+    // Game Over
+    if (gameOver) {
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#FFF';
+        ctx.font = `${Math.min(canvas.width, canvas.height) * 0.08}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.fillText('¡Game Over!', canvas.width / 2, canvas.height / 2);
+        ctx.font = `${Math.min(canvas.width, canvas.height) * 0.05}px Arial`;
+        ctx.fillText('Presiona ESPACIO para reiniciar', canvas.width / 2, canvas.height / 2 + canvas.height * 0.1);
+    }
+}
 
-            // Restaurar el estado del contexto
-            ctx.restore();
-        }
+// Game loop
+function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    update();
+    draw();
+    if (!gameOver) requestAnimationFrame(gameLoop);
+}
 
-        // Dibujar las criptomonedas con tamaño reducido
-        function drawCoins() {
-            coins.forEach(coin => {
-                // Dibujar la imagen de la criptomoneda más pequeña (reducida en un 25%)
-                ctx.drawImage(
-                    coin.type.image,
-                    coin.x * tileSize + tileSize / 4, // Centrar la imagen
-                    coin.y * tileSize + tileSize / 4,
-                    tileSize * 0.75, // Reducir el tamaño en un 25%
-                    tileSize * 0.75
-                );
-            });
-        }
+// Iniciar música de fondo
+document.getElementById('backgroundMusic').play();
 
-        // Dibujar los enemigos
-        function drawEnemies() {
-            enemies.forEach(enemy => {
-                const enemyWidth = tileSize * 1.5; // Tamaño aumentado
-                const enemyHeight = tileSize * 1.5;
-
-                // Guardar el estado del contexto
-                ctx.save();
-
-                // Calcular la posición central del enemigo
-                const centerX = enemy.x * tileSize + tileSize / 2;
-                const centerY = enemy.y * tileSize + tileSize / 2;
-
-                // Rotar el enemigo según su dirección
-                ctx.translate(centerX, centerY); // Mover el origen al centro del enemigo
-                if (enemy.direction === 'horizontal') {
-                    if (enemy.speed < 0) {
-                        ctx.scale(-1, 1); // Voltear horizontalmente si va hacia la izquierda
-                    }
-                } else if (enemy.direction === 'vertical') {
-                    if (enemy.speed < 0) {
-                        ctx.rotate(-Math.PI / 2); // Girar hacia arriba
-                    } else {
-                        ctx.rotate(Math.PI / 2); // Girar hacia abajo
-                    }
-                }
-
-                // Dibujar la imagen del enemigo
-                ctx.drawImage(
-                    enemy.image,
-                    -enemyWidth / 2, // Ajustar para centrar después de rotar
-                    -enemyHeight / 2,
-                    enemyWidth,
-                    enemyHeight
-                );
-
-                // Restaurar el estado del contexto
-                ctx.restore();
-            });
-        }
-
-        // Dibujar el temporizador, nivel y score
-        function drawGameInfo() {
-            const minutes = Math.floor(timeElapsed / 60);
-            const seconds = timeElapsed % 60;
-            const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-            ctx.fillStyle = '#fff';
-            ctx.font = '20px Arial';
-            ctx.textAlign = 'right';
-
-            // Mostrar información en el costado derecho
-            ctx.fillText(`Tiempo: ${formattedTime}`, canvas.width - 10, 30);
-            ctx.fillText(`Nivel: ${level}`, canvas.width - 10, 60);
-            ctx.fillText(`Score: ${score}`, canvas.width - 10, 90);
-        }
-
-        // Reiniciar el nivel actual o volver al primer nivel
-        function resetLevel() {
-            consecutiveLosses++;
-            if (consecutiveLosses >= 3) {
-                level = 1; // Volver al primer nivel
-                consecutiveLosses = 0; // Reiniciar contador de pérdidas
-            }
-
-            // Reiniciar el nivel actual
-            player = { 
-                x: 1, 
-                y: 1, 
-                targetX: 1, 
-                targetY: 1, 
-                direction: 'right', 
-                frame: 0, 
-                animationFrames: [0, 1, 2, 1],
-                tailAngle: 0,
-                tailSpeed: 0.05
-            };
-            coins = [];
-            enemies = [];
-            score = 0; // Reiniciar el score
-            timeElapsed = 0; // Reiniciar el contador de tiempo
-            generateCoins();
-            generateEnemies();
-        }
-
-        // Manejar el movimiento del jugador
-        document.addEventListener('keydown', event => {
-            if (gameOver) {
-                resetLevel();
-                gameOver = false;
-                return;
-            }
-
-            if (event.key === 'ArrowUp' && player.targetY > 0) {
-                player.targetY--;
-                player.direction = 'up';
-            } else if (event.key === 'ArrowDown' && player.targetY < rows - 1) {
-                player.targetY++;
-                player.direction = 'down';
-            } else if (event.key === 'ArrowLeft' && player.targetX > 0) {
-                player.targetX--;
-                player.direction = 'left';
-            } else if (event.key === 'ArrowRight' && player.targetX < cols - 1) {
-                player.targetX++;
-                player.direction = 'right';
-            }
-        });
-
-        // Actualizar el estado del juego
-        function updateGame() {
-            if (gameOver) {
-                ctx.fillStyle = '#fff';
-                ctx.font = '30px Arial';
-                ctx.fillText('¡Game Over!', canvas.width / 2 - 80, canvas.height / 2);
-                return;
-            }
-
-            if (gameWon) {
-                ctx.fillStyle = '#fff';
-                ctx.font = '30px Arial';
-                ctx.fillText('¡Ganaste!', canvas.width / 2 - 60, canvas.height / 2);
-                return;
-            }
-
-            // Incrementar el temporizador
-            timeElapsed++;
-
-            // Movimiento fluido del jugador
-            if (player.x !== player.targetX || player.y !== player.targetY) {
-                const dx = player.targetX - player.x;
-                const dy = player.targetY - player.y;
-                player.x += dx * 0.1; // Interpolación para movimiento fluido
-                player.y += dy * 0.1;
-            }
-
-            // Movimiento lineal de los enemigos
-            enemies.forEach(enemy => {
-                if (enemy.direction === 'horizontal') {
-                    enemy.x += enemy.speed;
-                    if (enemy.x < 0 || enemy.x >= cols) {
-                        enemy.speed *= -1; // Cambiar dirección al llegar al borde
-                    }
-                } else if (enemy.direction === 'vertical') {
-                    enemy.y += enemy.speed;
-                    if (enemy.y < 0 || enemy.y >= rows) {
-                        enemy.speed *= -1; // Cambiar dirección al llegar al borde
-                    }
-                }
-            });
-
-            // Verificar colisiones con enemigos
-            enemies.forEach(enemy => {
-                if (Math.abs(enemy.x - player.x) < 0.5 && Math.abs(enemy.y - player.y) < 0.5) {
-                    gameOver = true;
-                }
-            });
-
-            // Verificar si el jugador recoge una moneda
-            coins = coins.filter(coin => {
-                if (Math.abs(coin.x - player.x) < 0.5 && Math.abs(coin.y - player.y) < 0.5) {
-                    score++;
-                    return false; // Eliminar la moneda
-                }
-                return true;
-            });
-
-            // Verificar si el jugador ha ganado el nivel
-            if (coins.length === 0) {
-                level++; // Incrementar el nivel
-                generateCoins(); // Generar nuevas monedas
-                generateEnemies(); // Generar más enemigos
-                consecutiveLosses = 0; // Reiniciar contador de pérdidas
-            }
-
-            // Dibujar todos los elementos
-            drawBackground();
-            drawCoins();
-            drawEnemies();
-            drawPlayer();
-            drawGameInfo();
-        }
-
-        // Inicializar el juego
-        function initGame() {
-            generateCoins();
-            generateEnemies();
-            setInterval(updateGame, 20); // Intervalo más corto para mayor fluidez
-        }
-    </script>
+// Iniciar juego
+Promise.all([
+    ...bearFrames.map(frame => new Promise(r => { const img = new Image(); img.src = frame; img.onload = r; })),
+    new Promise(r => obstacleImg.onload = r),
+    new Promise(r => bgImg.onload = r),
+    new Promise(r => honeyImg.onload = r)
+]).then(gameLoop);
+</script>
 </body>
 </html>
